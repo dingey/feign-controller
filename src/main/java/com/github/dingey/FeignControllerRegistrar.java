@@ -3,9 +3,11 @@ package com.github.dingey;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinitionHolder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.EnvironmentAware;
@@ -24,10 +26,7 @@ import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class FeignControllerRegistrar implements ImportBeanDefinitionRegistrar, ResourceLoaderAware, EnvironmentAware, ApplicationContextAware {
     private ResourceLoader resourceLoader;
@@ -35,6 +34,7 @@ public class FeignControllerRegistrar implements ImportBeanDefinitionRegistrar, 
     private FeignControllerProperties properties;
 
     Log log = LogFactory.getLog(this.getClass());
+
 
     @Override
     public void setEnvironment(@NonNull Environment environment) {
@@ -66,7 +66,7 @@ public class FeignControllerRegistrar implements ImportBeanDefinitionRegistrar, 
                 }
             }
         } else {
-            if (properties.getPaths() != null && properties.getPaths().length > 0) {
+            if (properties != null && properties.getPaths() != null && properties.getPaths().length > 0) {
                 basePackages.addAll(Arrays.asList(properties.getPaths()));
             } else {
                 basePackages.add(ClassUtils.getPackageName(annotationMetadata.getClassName()));
@@ -84,17 +84,29 @@ public class FeignControllerRegistrar implements ImportBeanDefinitionRegistrar, 
     class ClassPathScanner extends ClassPathBeanDefinitionScanner {
 
         ClassPathScanner(BeanDefinitionRegistry registry) {
-            super(registry);
+            super(registry,false);
+            addIncludeFilter((metadataReader, metadataReaderFactory) -> metadataReader.getAnnotationMetadata().isAnnotated(FeignClient.class.getName()));
         }
 
         @Override
         protected Set<BeanDefinitionHolder> doScan(@NonNull String... basePackages) {
-            Set<BeanDefinitionHolder> holders = super.doScan(basePackages);
-            for (BeanDefinitionHolder holder : holders) {
-                BeanDefinition beanDefinition = holder.getBeanDefinition();
-                registerController(beanDefinition.getBeanClassName());
-            }
-            return holders;
+            Set<BeanDefinition> candidateComponents = findCandidateComponents(basePackages[0]);
+
+            return Collections.emptySet();
+        }
+
+
+        /**
+         * 默认情况下只有顶层具体类才会通过
+         * 只返回是接口的beanDefinition
+         *
+         * @param beanDefinition bean
+         * @return true / false
+         */
+        @Override
+        protected boolean isCandidateComponent(AnnotatedBeanDefinition beanDefinition) {
+            return beanDefinition.getMetadata().isInterface()
+                    && beanDefinition.getMetadata().isIndependent();
         }
     }
 
